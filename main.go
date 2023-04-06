@@ -24,8 +24,8 @@ const (
 	apiKey = config.APIKey
 	// mediaLibraryFile = "grin_media_library_content_one.json"
 	// mediaLibraryFile = "grin_media_library_content_two.json"
-	// mediaLibraryFile = "grin_media_library_content_5000.json"
-	mediaLibraryFile = "grin_media_library_content_500.json"
+	mediaLibraryFile = "grin_media_library_content_5000.json"
+	// mediaLibraryFile = "grin_media_library_content_500.json"
 	// mediaLibraryFile = "grin_media_library_content_all.json"
 	endpoint        = "https://api.openai.com/v1/embeddings"
 	model           = "text-embedding-ada-002"
@@ -146,7 +146,7 @@ func main() {
 	objects := make([]*models.Object, len(content))
 	for i := range content {
 		objects[i] = &models.Object{
-			Class: "content",
+			Class: schemaClass,
 			Properties: map[string]any{
 				"caption":  content[i].Caption,
 				"hashtags": content[i].Hashtags,
@@ -163,14 +163,34 @@ func main() {
 	// defer wg.Done()
 	// defer func() { <-threadLimit }() // remove from channel to allow another goroutine to start
 	// batch write items
-	batchRes, err := client.Batch().ObjectsBatcher().WithObjects(objects...).Do(context.Background())
-	if err != nil {
-		panic(err)
+	totalObjects := len(objects)
+
+	// Define the batch size.
+	batchSize := 500
+
+	// Calculate the number of batches.
+	numBatches := totalObjects / batchSize
+	if totalObjects%batchSize != 0 {
+		numBatches++
 	}
-	for _, res := range batchRes {
-		if res.Result.Errors != nil {
-			panic(fmt.Sprintf("batch load failed: %v", res.Result.Errors.Error[0].Message))
+
+	// Loop through the objects in batches.
+	for i := 0; i < numBatches; i++ {
+		// Calculate the start and end indices for the current batch.
+		start := i * batchSize
+		end := (i + 1) * batchSize
+		if end > totalObjects {
+			end = totalObjects
 		}
+
+		// Extract the objects for the current batch.
+		batch := objects[start:end]
+
+		// Use the batch in your Weaviate code.
+		client.Batch().ObjectsBatcher().WithObjects(batch...).Do(context.Background())
+		fmt.Println("Batch done")
+
+		// Optionally, you can add a delay or sleep here between batches if needed.
 	}
 
 	// }(content[i])
