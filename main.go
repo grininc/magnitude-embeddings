@@ -22,17 +22,17 @@ import (
 )
 
 const (
-	apiKey = ""
+	apiKey = "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"
 	// mediaLibraryFile = "grin_media_library_content_one.json"
 	// mediaLibraryFile = "grin_media_library_content_two.json"
-	// mediaLibraryFile = "grin_media_library_content_500.json"
-	mediaLibraryFile = "grin_media_library_content_all.json"
-	endpoint         = "https://api.openai.com/v1/embeddings"
-	model            = "text-embedding-ada-002"
-	mongoConnection  = "mongodb://root:local@mongodb:27017"
-	mongoDatabase    = "admin"
-	// mongoCollection  = "demo_embeddings"
-	mongoCollection = "embeddings"
+	mediaLibraryFile = "grin_media_library_content_500.json"
+	// mediaLibraryFile = "grin_media_library_content_all.json"
+	endpoint        = "https://api.openai.com/v1/embeddings"
+	model           = "text-embedding-ada-002"
+	mongoConnection = "mongodb://root:local@mongodb:27017"
+	mongoDatabase   = "admin"
+	mongoCollection = "demo_embeddings"
+	// mongoCollection = "embeddings"
 )
 
 type EmbeddingAPIResponse struct {
@@ -229,15 +229,33 @@ func FindMatches(input string) {
 		Similarity float64
 	}
 
+	// Create a channel to synchronize the Goroutines
+	ch := make(chan struct{}, 100)
+
 	for _, doc := range embeddings {
-		similarity := cosineSimilarity(doc, apiResponse)
-		cosineSimilarities = append(cosineSimilarities, struct {
-			ID         string
-			Similarity float64
-		}{
-			ID:         doc.Id,
-			Similarity: similarity,
-		})
+		// Add a Goroutine to the channel
+		ch <- struct{}{}
+		go func(doc EmbeddingDocument) {
+			defer func() {
+				// Remove the Goroutine from the channel when done
+				<-ch
+			}()
+
+			// Call cosineSimilarity and append the result to cosineSimilarities
+			similarity := cosineSimilarity(doc, apiResponse)
+			cosineSimilarities = append(cosineSimilarities, struct {
+				ID         string
+				Similarity float64
+			}{
+				ID:         doc.Id,
+				Similarity: similarity,
+			})
+		}(doc)
+	}
+
+	// Wait for all Goroutines to finish
+	for i := 0; i < cap(ch); i++ {
+		ch <- struct{}{}
 	}
 
 	// Sort the cosineSimilarities array by magnitude (descending)
