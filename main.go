@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"main/config"
 	"math"
 	"net/http"
 	"os"
@@ -22,7 +23,7 @@ import (
 )
 
 const (
-	apiKey = "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"
+	apiKey = config.APIKey
 	// mediaLibraryFile = "grin_media_library_content_one.json"
 	// mediaLibraryFile = "grin_media_library_content_two.json"
 	mediaLibraryFile = "grin_media_library_content_500.json"
