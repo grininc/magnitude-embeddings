@@ -22,13 +22,17 @@ import (
 )
 
 const (
-	apiKey = "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"
+	apiKey = ""
 	// mediaLibraryFile = "grin_media_library_content_one.json"
 	// mediaLibraryFile = "grin_media_library_content_two.json"
-	// mediaLibraryFile = "grin_media_library_content.json"
+	// mediaLibraryFile = "grin_media_library_content_500.json"
 	mediaLibraryFile = "grin_media_library_content_all.json"
 	endpoint         = "https://api.openai.com/v1/embeddings"
 	model            = "text-embedding-ada-002"
+	mongoConnection  = "mongodb://root:local@mongodb:27017"
+	mongoDatabase    = "admin"
+	// mongoCollection  = "demo_embeddings"
+	mongoCollection = "embeddings"
 )
 
 type EmbeddingAPIResponse struct {
@@ -73,7 +77,6 @@ type EmbeddingDocument struct {
 }
 
 func main() {
-	var input string
 	fmt.Print("Enter your query: ")
 	reader := bufio.NewReader(os.Stdin)
 	input, err := reader.ReadString('\n')
@@ -102,7 +105,7 @@ func main() {
 
 	// Compute embeddings for each piece of content
 	var wg sync.WaitGroup
-	var threadLimit = make(chan struct{}, 100) // limit to 100 threads at a time
+	var threadLimit = make(chan struct{}, 50) // limit to 100 threads at a time
 
 	for i := range content {
 		threadLimit <- struct{}{} // add to channel to limit the number of goroutines
@@ -160,7 +163,7 @@ func GetEmbedding(item MediaLibraryContent) EmbeddingAPIResponse {
 }
 
 func WriteToMongo(item MediaLibraryContent, apiResponse EmbeddingAPIResponse) {
-	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://root:local@mongodb:27017"))
+	client, err := mongo.NewClient(options.Client().ApplyURI(mongoConnection))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -172,7 +175,7 @@ func WriteToMongo(item MediaLibraryContent, apiResponse EmbeddingAPIResponse) {
 	}
 	defer client.Disconnect(ctx)
 
-	collection := client.Database("admin").Collection("embeddings")
+	collection := client.Database(mongoDatabase).Collection(mongoCollection)
 
 	embeddingDoc := EmbeddingDocument{
 		Id:        item.Id,
@@ -253,7 +256,7 @@ func FindMatches(input string) {
 }
 
 func GetAllEmbeddings() ([]EmbeddingDocument, error) {
-	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://root:local@mongodb:27017"))
+	client, err := mongo.NewClient(options.Client().ApplyURI(mongoConnection))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -265,7 +268,7 @@ func GetAllEmbeddings() ([]EmbeddingDocument, error) {
 	}
 	defer client.Disconnect(ctx)
 
-	coll := client.Database("admin").Collection("embeddings")
+	coll := client.Database(mongoDatabase).Collection(mongoCollection)
 
 	// Find all documents in the collection
 	cursor, err := coll.Find(context.Background(), bson.D{})
