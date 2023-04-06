@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -11,12 +10,11 @@ import (
 	"main/config"
 	"math"
 	"net/http"
-	"os"
 	"sort"
-	"strings"
-	"sync"
 	"time"
 
+	"github.com/weaviate/weaviate-go-client/v4/weaviate"
+	"github.com/weaviate/weaviate/entities/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -26,6 +24,7 @@ const (
 	apiKey = config.APIKey
 	// mediaLibraryFile = "grin_media_library_content_one.json"
 	// mediaLibraryFile = "grin_media_library_content_two.json"
+	// mediaLibraryFile = "grin_media_library_content_5000.json"
 	mediaLibraryFile = "grin_media_library_content_500.json"
 	// mediaLibraryFile = "grin_media_library_content_all.json"
 	endpoint        = "https://api.openai.com/v1/embeddings"
@@ -34,6 +33,8 @@ const (
 	mongoDatabase   = "admin"
 	mongoCollection = "demo_embeddings"
 	// mongoCollection = "embeddings"
+	schemaClass  = "Content5000"
+	createSchema = true
 )
 
 type EmbeddingAPIResponse struct {
@@ -78,18 +79,20 @@ type EmbeddingDocument struct {
 }
 
 func main() {
-	fmt.Print("Enter your query: ")
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		log.Fatal(err)
-	}
-	input = strings.TrimSpace(input)
+	/*
+		fmt.Print("Enter your query: ")
+		reader := bufio.NewReader(os.Stdin)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			log.Fatal(err)
+		}
+		input = strings.TrimSpace(input)
 
-	if input != "init" {
-		FindMatches(input)
-		return
-	}
+		if input != "init" {
+			FindMatches(input)
+			return
+		}
+	*/
 
 	// Read the JSON file into a byte slice
 	data, err := ioutil.ReadFile(mediaLibraryFile)
@@ -105,24 +108,74 @@ func main() {
 	}
 
 	// Compute embeddings for each piece of content
-	var wg sync.WaitGroup
-	var threadLimit = make(chan struct{}, 50) // limit to 100 threads at a time
+	// var wg sync.WaitGroup
+	// var threadLimit = make(chan struct{}, 50) // limit to 100 threads at a time
 
-	for i := range content {
-		threadLimit <- struct{}{} // add to channel to limit the number of goroutines
-		wg.Add(1)
-		go func(item MediaLibraryContent) {
-			defer wg.Done()
-			defer func() { <-threadLimit }() // remove from channel to allow another goroutine to start
-
-			apiResponse := GetEmbedding(item)
-
-			// Get a handle to the "embeddings" collection in the "admin" database
-			// Insert the EmbeddingAPIResponse into the "embeddings" collection
-			WriteToMongo(item, apiResponse)
-		}(content[i])
+	cfg := weaviate.Config{
+		Host:   "localhost:8080",
+		Scheme: "http",
+		Headers: map[string]string{
+			"X-OpenAI-Api-Key": config.APIKey,
+		},
 	}
-	wg.Wait()
+
+	client, err := weaviate.NewClient(cfg)
+	if err != nil {
+		panic(err)
+	}
+
+	schema, err := client.Schema().Getter().Do(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%+v", schema)
+
+	if createSchema {
+		classObj := &models.Class{
+			Class:      schemaClass,
+			Vectorizer: "text2vec-openai", // Or "text2vec-cohere" or "text2vec-huggingface"
+		}
+
+		// add the schema
+		err = client.Schema().ClassCreator().WithClass(classObj).Do(context.Background())
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	objects := make([]*models.Object, len(content))
+	for i := range content {
+		objects[i] = &models.Object{
+			Class: "content",
+			Properties: map[string]any{
+				"caption":  content[i].Caption,
+				"hashtags": content[i].Hashtags,
+				"mentions": content[i].Mentions,
+				"media_id": content[i].Id,
+			},
+		}
+	}
+
+	// for i := range content {
+	// threadLimit <- struct{}{} // add to channel to limit the number of goroutines
+	// wg.Add(1)
+	// go func(item MediaLibraryContent) {
+	// defer wg.Done()
+	// defer func() { <-threadLimit }() // remove from channel to allow another goroutine to start
+	// batch write items
+	batchRes, err := client.Batch().ObjectsBatcher().WithObjects(objects...).Do(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	for _, res := range batchRes {
+		if res.Result.Errors != nil {
+			panic(fmt.Sprintf("batch load failed: %v", res.Result.Errors.Error[0].Message))
+		}
+	}
+
+	// }(content[i])
+	// }
+	// wg.Wait()
 
 }
 
