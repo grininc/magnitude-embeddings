@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/weaviate/weaviate-go-client/v4/weaviate"
+	"github.com/weaviate/weaviate-go-client/v4/weaviate/fault"
 	"github.com/weaviate/weaviate/entities/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -24,8 +26,9 @@ const (
 	apiKey = config.APIKey
 	// mediaLibraryFile = "grin_media_library_content_one.json"
 	// mediaLibraryFile = "grin_media_library_content_two.json"
-	mediaLibraryFile = "grin_media_library_content_5000.json"
-	// mediaLibraryFile = "grin_media_library_content_500.json"
+	// mediaLibraryFile = "grin_media_library_content_5000.json"
+	// mediaLibraryFile = "grin_media_library_content10000.json"
+	mediaLibraryFile = "grin_media_library_content_500.json"
 	// mediaLibraryFile = "grin_media_library_content_all.json"
 	endpoint        = "https://api.openai.com/v1/embeddings"
 	model           = "text-embedding-ada-002"
@@ -33,9 +36,20 @@ const (
 	mongoDatabase   = "admin"
 	mongoCollection = "demo_embeddings"
 	// mongoCollection = "embeddings"
-	schemaClass  = "Content5000"
+	schemaClass  = "ContentDemo"
 	createSchema = true
 )
+
+type WeaviateClientError struct {
+	IsUnexpectedStatusCode bool
+	StatusCode             int
+	Msg                    string
+	DerivedFromError       error
+}
+
+func (e *WeaviateClientError) Error() string {
+	return e.DerivedFromError.Error()
+}
 
 type EmbeddingAPIResponse struct {
 	Object string `json:"object"`
@@ -124,12 +138,6 @@ func main() {
 		panic(err)
 	}
 
-	schema, err := client.Schema().Getter().Do(context.Background())
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("%+v", schema)
-
 	if createSchema {
 		classObj := &models.Class{
 			Class:      schemaClass,
@@ -187,10 +195,22 @@ func main() {
 		batch := objects[start:end]
 
 		// Use the batch in your Weaviate code.
-		client.Batch().ObjectsBatcher().WithObjects(batch...).Do(context.Background())
-		fmt.Println("Batch done")
-
-		// Optionally, you can add a delay or sleep here between batches if needed.
+		res, err := client.Batch().ObjectsBatcher().WithObjects(batch...).Do(context.Background())
+		if err != nil {
+			fmt.Println()
+			var errWeaviate *fault.WeaviateClientError
+			errors.As(err, &errWeaviate)
+			fmt.Print("Batch error found: ")
+			fmt.Println(errWeaviate.DerivedFromError)
+		}
+		for i := 0; i < len(res); i++ {
+			if res[i].Result.Errors != nil {
+				fmt.Print("Individual error found: ")
+				fmt.Println(res[i].Result.Errors.Error[0].Message)
+			}
+		}
+		fmt.Printf("Batch done: %d\n", (i+1)*batchSize)
+		// time.Sleep(10000 * time.Millisecond)
 	}
 
 	// }(content[i])
