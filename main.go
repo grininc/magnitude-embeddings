@@ -28,15 +28,16 @@ const (
 	// mediaLibraryFile = "grin_media_library_content_two.json"
 	// mediaLibraryFile = "grin_media_library_content_5000.json"
 	// mediaLibraryFile = "grin_media_library_content10000.json"
-	mediaLibraryFile = "grin_media_library_content_500.json"
+	// mediaLibraryFile = "grin_media_library_content_500.json"
 	// mediaLibraryFile = "grin_media_library_content_all.json"
-	endpoint        = "https://api.openai.com/v1/embeddings"
-	model           = "text-embedding-ada-002"
-	mongoConnection = "mongodb://root:local@mongodb:27017"
-	mongoDatabase   = "admin"
-	mongoCollection = "demo_embeddings"
+	mediaLibraryFile = "mlc_contact_10000.json"
+	endpoint         = "https://api.openai.com/v1/embeddings"
+	model            = "text-embedding-ada-002"
+	mongoConnection  = "mongodb://root:local@mongodb:27017"
+	mongoDatabase    = "admin"
+	mongoCollection  = "demo_embeddings"
 	// mongoCollection = "embeddings"
-	schemaClass  = "ContentDemo"
+	schemaClass  = "ContentCreator"
 	createSchema = true
 )
 
@@ -79,6 +80,13 @@ func (r *EmbeddingAPIResponse) SetMagnitude() {
 	r.Data[0].Magnitude = magnitude
 }
 
+type MediaLibraryContentContact struct {
+	Id         string `json:"id"`
+	Caption    string `json:"caption"`
+	ContactId  string `json:"contact_id"`
+	NetworkUrl string `json:"network_url"`
+}
+
 type MediaLibraryContent struct {
 	Id       string `json:"id"`
 	Caption  string `json:"caption"`
@@ -115,7 +123,7 @@ func main() {
 	}
 
 	// Unmarshal the byte slice into a slice of MediaLibraryContent structs
-	var content []MediaLibraryContent
+	var content []MediaLibraryContentContact
 	err = json.Unmarshal(data, &content)
 	if err != nil {
 		log.Fatalf("Failed to unmarshal JSON data: %v", err)
@@ -156,10 +164,10 @@ func main() {
 		objects[i] = &models.Object{
 			Class: schemaClass,
 			Properties: map[string]any{
-				"caption":  content[i].Caption,
-				"hashtags": content[i].Hashtags,
-				"mentions": content[i].Mentions,
-				"media_id": content[i].Id,
+				"caption":     content[i].Caption,
+				"contact_id":  content[i].ContactId,
+				"network_url": content[i].NetworkUrl,
+				"media_id":    content[i].Id,
 			},
 		}
 	}
@@ -210,7 +218,7 @@ func main() {
 			}
 		}
 		fmt.Printf("Batch done: %d\n", (i+1)*batchSize)
-		// time.Sleep(10000 * time.Millisecond)
+		time.Sleep(10000 * time.Millisecond)
 	}
 
 	// }(content[i])
