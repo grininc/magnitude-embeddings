@@ -30,14 +30,17 @@ const (
 	// mediaLibraryFile = "grin_media_library_content10000.json"
 	// mediaLibraryFile = "grin_media_library_content_500.json"
 	// mediaLibraryFile = "grin_media_library_content_all.json"
-	mediaLibraryFile = "mlc_contact_10000.json"
+	//mediaLibraryFile = "mlc_contact_10000.json"
+	//mediaLibraryFile = "local1000000.json"
+	//mediaLibraryFile = "prod53257.json"
+	mediaLibraryFile = "ogall.json"
 	endpoint         = "https://api.openai.com/v1/embeddings"
 	model            = "text-embedding-ada-002"
 	mongoConnection  = "mongodb://root:local@mongodb:27017"
 	mongoDatabase    = "admin"
 	mongoCollection  = "demo_embeddings"
 	// mongoCollection = "embeddings"
-	schemaClass  = "ContentCreator"
+	schemaClass  = "ContentCreatorMetaAll"
 	createSchema = true
 )
 
@@ -78,6 +81,15 @@ func (r *EmbeddingAPIResponse) SetMagnitude() {
 	}
 	magnitude := math.Sqrt(sum)
 	r.Data[0].Magnitude = magnitude
+}
+
+type MediaLibraryContentContactMeta struct {
+	Id            string  `json:"id"`
+	Caption       string  `json:"caption"`
+	ContactId     string  `json:"contact_id"`
+	NetworkUrl    string  `json:"network_url"`
+	Reach         int     `json:"reach"`
+	AvgEngagement float64 `json:"avg_engagement"`
 }
 
 type MediaLibraryContentContact struct {
@@ -123,7 +135,7 @@ func main() {
 	}
 
 	// Unmarshal the byte slice into a slice of MediaLibraryContent structs
-	var content []MediaLibraryContentContact
+	var content []MediaLibraryContentContactMeta
 	err = json.Unmarshal(data, &content)
 	if err != nil {
 		log.Fatalf("Failed to unmarshal JSON data: %v", err)
@@ -164,10 +176,12 @@ func main() {
 		objects[i] = &models.Object{
 			Class: schemaClass,
 			Properties: map[string]any{
-				"caption":     content[i].Caption,
-				"contact_id":  content[i].ContactId,
-				"network_url": content[i].NetworkUrl,
-				"media_id":    content[i].Id,
+				"caption":        content[i].Caption,
+				"contact_id":     content[i].ContactId,
+				"network_url":    content[i].NetworkUrl,
+				"media_id":       content[i].Id,
+				"reach":          content[i].Reach,
+				"avg_engagement": content[i].AvgEngagement,
 			},
 		}
 	}
